@@ -1,8 +1,9 @@
 import React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { format, isValid } from "date-fns";
 import ApperIcon from "@/components/ApperIcon";
+import Home from "@/components/pages/Home";
 import Button from "@/components/atoms/Button";
-import { format } from "date-fns";
 
 const OrderConfirmation = () => {
   const location = useLocation();
@@ -51,8 +52,13 @@ const OrderConfirmation = () => {
                 <h3 className="font-medium text-primary mb-3">Order Information</h3>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Order Date:</span>
-                    <span>{format(new Date(order.orderDate), "MMM dd, yyyy")}</span>
+<span className="text-gray-600">Order Date:</span>
+                    <span>
+                      {order.orderDate && isValid(new Date(order.orderDate)) 
+                        ? format(new Date(order.orderDate), "MMM dd, yyyy")
+                        : "Date not available"
+                      }
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Status:</span>
