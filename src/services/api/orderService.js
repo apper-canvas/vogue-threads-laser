@@ -1,227 +1,248 @@
+import { getApperClient } from "@/services/apperClient";
+import { toast } from "react-toastify";
+
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 class OrderService {
   constructor() {
-    this.orders = [];
-    this.initializeMockOrders();
-  }
-
-  initializeMockOrders() {
-    // Mock orders for demonstration
-    const mockOrders = [
-      {
-        Id: 1001,
-        orderNumber: "VT001001",
-        orderDate: "2024-01-15T10:30:00Z",
-        status: "delivered",
-        total: 299.99,
-        items: [
-          { id: 1, name: "Classic Denim Jacket", price: 149.99, quantity: 1, image: "/api/placeholder/80/80" },
-          { id: 2, name: "Cotton T-Shirt", price: 29.99, quantity: 5, image: "/api/placeholder/80/80" }
-        ],
-        shippingAddress: {
-          name: "John Doe",
-          address: "123 Main St",
-          city: "New York",
-          state: "NY",
-          zip: "10001"
-        },
-        tracking: {
-          carrier: "FedEx",
-          trackingNumber: "1234567890",
-          events: [
-            { date: "2024-01-15T10:30:00Z", status: "Order placed", location: "Online" },
-            { date: "2024-01-16T09:00:00Z", status: "Processing", location: "Warehouse" },
-            { date: "2024-01-16T15:30:00Z", status: "Shipped", location: "New York, NY" },
-            { date: "2024-01-18T14:20:00Z", status: "Out for delivery", location: "New York, NY" },
-            { date: "2024-01-18T16:45:00Z", status: "Delivered", location: "New York, NY" }
-          ]
-        }
-      },
-      {
-        Id: 1002,
-        orderNumber: "VT001002", 
-        orderDate: "2024-01-20T14:15:00Z",
-        status: "shipped",
-        total: 189.98,
-        items: [
-          { id: 3, name: "Leather Boots", price: 189.98, quantity: 1, image: "/api/placeholder/80/80" }
-        ],
-        shippingAddress: {
-          name: "John Doe",
-          address: "123 Main St",
-          city: "New York", 
-          state: "NY",
-          zip: "10001"
-        },
-        tracking: {
-          carrier: "UPS",
-          trackingNumber: "9876543210",
-          events: [
-            { date: "2024-01-20T14:15:00Z", status: "Order placed", location: "Online" },
-            { date: "2024-01-21T10:00:00Z", status: "Processing", location: "Warehouse" },
-            { date: "2024-01-22T08:30:00Z", status: "Shipped", location: "Chicago, IL" },
-            { date: "2024-01-23T12:00:00Z", status: "In transit", location: "Cleveland, OH" }
-          ]
-        }
-      },
-      {
-        Id: 1003,
-        orderNumber: "VT001003",
-        orderDate: "2024-01-25T11:45:00Z", 
-        status: "processing",
-        total: 459.97,
-        items: [
-          { id: 4, name: "Winter Coat", price: 299.99, quantity: 1, image: "/api/placeholder/80/80" },
-          { id: 5, name: "Wool Scarf", price: 79.99, quantity: 2, image: "/api/placeholder/80/80" }
-        ],
-        shippingAddress: {
-          name: "John Doe",
-          address: "123 Main St",
-          city: "New York",
-          state: "NY", 
-          zip: "10001"
-        },
-        tracking: {
-          carrier: "DHL",
-          trackingNumber: "5555666677",
-          events: [
-            { date: "2024-01-25T11:45:00Z", status: "Order placed", location: "Online" },
-            { date: "2024-01-26T09:30:00Z", status: "Processing", location: "Warehouse" }
-          ]
-        }
-      }
-    ];
-    
-    this.orders = [...mockOrders];
+    this.tableName = 'orders_c';
   }
 
   async createOrder(orderData) {
-    await delay(500);
-    
-    const order = {
-      Id: Date.now(),
-      ...orderData,
-      status: "confirmed",
-      orderDate: new Date().toISOString(),
-      orderNumber: `VT${Date.now().toString().slice(-6)}`,
-      tracking: {
-        carrier: "FedEx",
-        trackingNumber: `TRK${Date.now().toString().slice(-8)}`,
-        events: [
-          { date: new Date().toISOString(), status: "Order placed", location: "Online" }
-        ]
+    await delay(200);
+    try {
+      const apperClient = getApperClient();
+      if (!apperClient) {
+        throw new Error('ApperClient not available');
       }
-    };
 
-    this.orders.unshift(order);
-    
-    return {
-      success: true,
-      data: order
-    };
+      const orderNumber = `ORD-${Date.now()}`;
+      
+      const params = {
+        records: [{
+          orderNumber_c: orderNumber,
+          orderDate_c: new Date().toISOString(),
+          status_c: "confirmed",
+          total_c: orderData.totalAmount,
+          items_c: JSON.stringify(orderData.items),
+          shippingAddress_c: JSON.stringify(orderData.shippingAddress),
+          tracking_c: JSON.stringify({
+            trackingNumber: `TRK-${Date.now()}`,
+            carrier: "Standard Shipping",
+            events: [
+              {
+                status: "Order Confirmed",
+                date: new Date().toISOString(),
+                location: "Processing Center"
+              }
+            ]
+          })
+        }]
+      };
+
+      const response = await apperClient.createRecord(this.tableName, params);
+
+      if (!response.success) {
+        console.error(response.message);
+        toast.error(response.message);
+        return { success: false, error: response.message };
+      }
+
+      if (response.results) {
+        const successful = response.results.filter(r => r.success);
+        const failed = response.results.filter(r => !r.success);
+        
+        if (failed.length > 0) {
+          console.error(`Failed to create order: ${JSON.stringify(failed)}`);
+          failed.forEach(record => {
+            if (record.message) toast.error(record.message);
+          });
+          return { success: false, error: "Failed to create order" };
+        }
+        
+        if (successful.length > 0) {
+          return {
+            success: true,
+            data: {
+              orderId: successful[0].data.Id,
+              orderNumber: orderNumber
+            }
+          };
+        }
+      }
+
+      return { success: false, error: "Order creation failed" };
+
+    } catch (error) {
+      console.error("Error creating order:", error);
+      return { success: false, error: error.message };
+    }
   }
 
   async getOrderById(id) {
-    await delay(200);
-    
-    const order = this.orders.find(o => o.Id === parseInt(id));
-    
-    if (!order) {
-      return {
-        success: false,
-        error: "Order not found"
-      };
-    }
+    try {
+      const apperClient = getApperClient();
+      if (!apperClient) {
+        throw new Error('ApperClient not available');
+      }
 
-    return {
-      success: true,
-      data: order
-    };
+      const params = {
+        fields: [
+          {"field": {"Name": "Id"}},
+          {"field": {"Name": "orderNumber_c"}},
+          {"field": {"Name": "orderDate_c"}},
+          {"field": {"Name": "status_c"}},
+          {"field": {"Name": "total_c"}},
+          {"field": {"Name": "items_c"}},
+          {"field": {"Name": "shippingAddress_c"}},
+          {"field": {"Name": "tracking_c"}}
+        ]
+      };
+
+      const response = await apperClient.getRecordById(this.tableName, parseInt(id), params);
+
+      if (!response.success) {
+        return { success: false, error: "Order not found" };
+      }
+
+      if (!response.data) {
+        return { success: false, error: "Order not found" };
+      }
+
+      // Transform database fields to UI format
+      const order = {
+        Id: response.data.Id,
+        orderNumber: response.data.orderNumber_c,
+        orderDate: response.data.orderDate_c,
+        status: response.data.status_c,
+        total: response.data.total_c,
+        items: response.data.items_c ? JSON.parse(response.data.items_c) : [],
+        shippingAddress: response.data.shippingAddress_c ? JSON.parse(response.data.shippingAddress_c) : {},
+        tracking: response.data.tracking_c ? JSON.parse(response.data.tracking_c) : null
+      };
+
+      return { success: true, data: order };
+
+    } catch (error) {
+      console.error("Error fetching order:", error);
+      return { success: false, error: error.message };
+    }
   }
 
   async getUserOrders(filters = {}) {
     await delay(300);
-    
-    let filteredOrders = [...this.orders];
-    
-    // Filter by status
-    if (filters.status && filters.status !== 'all') {
-      filteredOrders = filteredOrders.filter(order => order.status === filters.status);
+    try {
+      const apperClient = getApperClient();
+      if (!apperClient) {
+        throw new Error('ApperClient not available');
+      }
+
+      const params = {
+        fields: [
+          {"field": {"Name": "Id"}},
+          {"field": {"Name": "orderNumber_c"}},
+          {"field": {"Name": "orderDate_c"}},
+          {"field": {"Name": "status_c"}},
+          {"field": {"Name": "total_c"}},
+          {"field": {"Name": "items_c"}},
+          {"field": {"Name": "shippingAddress_c"}},
+          {"field": {"Name": "tracking_c"}}
+        ],
+        orderBy: [{"fieldName": "orderDate_c", "sorttype": "DESC"}]
+      };
+
+      const response = await apperClient.fetchRecords(this.tableName, params);
+
+      if (!response.success) {
+        console.error(response.message);
+        toast.error(response.message);
+        return { success: false, error: response.message };
+      }
+
+      // Transform database fields to UI format
+      const orders = response.data.map(order => ({
+        Id: order.Id,
+        orderNumber: order.orderNumber_c,
+        orderDate: order.orderDate_c,
+        status: order.status_c,
+        total: order.total_c,
+        items: order.items_c ? JSON.parse(order.items_c) : [],
+        shippingAddress: order.shippingAddress_c ? JSON.parse(order.shippingAddress_c) : {},
+        tracking: order.tracking_c ? JSON.parse(order.tracking_c) : null
+      }));
+
+      return { success: true, data: orders };
+
+    } catch (error) {
+      console.error("Error fetching user orders:", error);
+      return { success: false, error: error.message };
     }
-    
-    // Filter by search query
-    if (filters.search) {
-      const query = filters.search.toLowerCase();
-      filteredOrders = filteredOrders.filter(order => 
-        order.orderNumber.toLowerCase().includes(query) ||
-        order.items.some(item => item.name.toLowerCase().includes(query))
-      );
-    }
-    
-    // Sort by date (newest first)
-    filteredOrders.sort((a, b) => new Date(b.orderDate) - new Date(a.orderDate));
-    
-    return {
-      success: true,
-      data: filteredOrders
-    };
   }
 
   async getOrderTracking(orderId) {
     await delay(200);
-    
-    const order = this.orders.find(o => o.Id === parseInt(orderId));
-    
-    if (!order) {
+    try {
+      const orderResponse = await this.getOrderById(orderId);
+      
+      if (!orderResponse.success) {
+        return { success: false, error: "Order not found" };
+      }
+
+      const order = orderResponse.data;
+      
       return {
-        success: false,
-        error: "Order not found"
+        success: true,
+        data: order.tracking || {
+          trackingNumber: "N/A",
+          carrier: "Standard Shipping", 
+          events: []
+        }
       };
+
+    } catch (error) {
+      console.error("Error getting order tracking:", error);
+      return { success: false, error: error.message };
     }
-    
-    return {
-      success: true,
-      data: order.tracking
-    };
   }
 
   async updateOrderStatus(orderId, newStatus) {
-    await delay(300);
-    
-    const orderIndex = this.orders.findIndex(o => o.Id === parseInt(orderId));
-    
-    if (orderIndex === -1) {
-      return {
-        success: false,
-        error: "Order not found"
+    await delay(200);
+    try {
+      const apperClient = getApperClient();
+      if (!apperClient) {
+        throw new Error('ApperClient not available');
+      }
+
+      const params = {
+        records: [{
+          Id: parseInt(orderId),
+          status_c: newStatus
+        }]
       };
+
+      const response = await apperClient.updateRecord(this.tableName, params);
+
+      if (!response.success) {
+        console.error(response.message);
+        toast.error(response.message);
+        return { success: false, error: response.message };
+      }
+
+      return { success: true };
+
+    } catch (error) {
+      console.error("Error updating order status:", error);
+      return { success: false, error: error.message };
     }
-    
-    this.orders[orderIndex].status = newStatus;
-    
-    // Add tracking event
-    const trackingEvent = {
-      date: new Date().toISOString(),
-      status: newStatus.charAt(0).toUpperCase() + newStatus.slice(1),
-      location: "Warehouse"
-    };
-    
-    this.orders[orderIndex].tracking.events.push(trackingEvent);
-    
-    return {
-      success: true,
-      data: this.orders[orderIndex]
-    };
   }
 
   async processPayment(paymentData) {
     await delay(1000);
     
     // Simulate payment processing
-    const success = Math.random() > 0.1; // 90% success rate
+    const isSuccess = Math.random() > 0.1; // 90% success rate
     
-    if (success) {
+    if (isSuccess) {
       return {
         success: true,
         data: {

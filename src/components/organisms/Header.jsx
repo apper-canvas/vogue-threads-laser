@@ -3,6 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import productsService from "@/services/api/productsService";
 import cartService from "@/services/api/cartService";
 import { wishlistService } from "@/services/api/wishlistService";
+import { useAuth } from "@/layouts/Root";
+import { useSelector } from "react-redux";
 import ApperIcon from "@/components/ApperIcon";
 import CartIcon from "@/components/molecules/CartIcon";
 import CategoryDropdown from "@/components/molecules/CategoryDropdown";
@@ -129,7 +131,21 @@ const Header = ({ onCartClick }) => {
                 )}
               </Link>
               
-              <CartIcon count={cartCount} onClick={handleCartClick} />
+<CartIcon count={cartCount} onClick={handleCartClick} />
+              
+              {/* Logout Button - Only show when authenticated */}
+              {useSelector(state => state.user.isAuthenticated) && (
+                <button
+                  onClick={() => {
+                    const { logout } = useAuth();
+                    logout();
+                  }}
+                  className="flex items-center space-x-1 px-3 py-1 text-sm text-gray-600 hover:text-accent transition-colors"
+                >
+                  <ApperIcon name="LogOut" className="w-4 h-4" />
+                  <span>Logout</span>
+                </button>
+              )}
               {/* Mobile Menu Button */}
               {/* Mobile Menu Button */}
               <button
